@@ -1,0 +1,36 @@
+# Core Framework
+fastapi==0.115.11
+uvicorn==0.34.0
+pydantic==2.10.6
+slowapi==0.1.9
+
+# AI/ML - Using Groq (OpenAI-compatible API)
+openai==1.64.0
+huggingface-hub>=0.20.0
+transformers>=4.30.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Vision/OCR
+easyocr==1.7.2
+pillow==11.1.0
+opencv-python==4.11.0.86
+ultralytics>=8.0.0
+supervision>=0.3.0
+
+# Desktop Automation
+pyautogui==0.9.54
+pynput>=1.7.0
+
+# GUI
+PyQt6>=6.5.0
+
+# Audio/TTS (optional)
+# RealtimeTTS>=0.4.0
+
+# Utilities
+loguru==0.7.3
+python-dotenv==1.0.1
+prompt-toolkit==3.0.50
+requests==2.32.3
+pandas>=2.0.0
