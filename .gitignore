@@ -4,3 +4,8 @@ __pycache__/
 venv/
 *.log
 build_repo.py
+screenshots/
+logs/
+*.egg-info/
+dist/
+build/
