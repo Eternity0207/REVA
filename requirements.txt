@@ -1,3 +1,4 @@
 # Core
 python-dotenv>=1.0.0
 loguru>=0.7.0
+openai>=1.0.0

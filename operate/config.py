@@ -1,6 +1,7 @@
 """Configuration management"""
 import os
 from dotenv import load_dotenv
+from openai import OpenAI
 
 class Config:
     _instance = None
@@ -13,3 +14,10 @@ class Config:
     def __init__(self):
         load_dotenv()
         self.verbose = False
+        self.api_key = None
+
+    def initialize_groq(self):
+        """Initialize Groq client"""
+        api_key = self.api_key or os.getenv("OPENAI_API_KEY")
+        base_url = os.getenv("OPENAI_API_BASE_URL", "https://api.groq.com/openai/v1")
+        return OpenAI(api_key=api_key, base_url=base_url)
