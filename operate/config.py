@@ -22,8 +22,6 @@ class Config:
     def initialize_groq(self):
         api_key = self.api_key or os.getenv("OPENAI_API_KEY")
         base_url = os.getenv("OPENAI_API_BASE_URL", "https://api.groq.com/openai/v1")
-        if not api_key:
-            logger.warning("No API key found")
         return OpenAI(api_key=api_key, base_url=base_url)
 
     def validation(self, model, voice_mode):
@@ -33,6 +31,8 @@ class Config:
         if not key_value:
             return
         self.api_key = key_value
-        with open(".env", "a") as f:
-            f.write(f"\nOPENAI_API_KEY='{key_value}'\n")
+        with open(".env", "w") as f:
+            f.write(f"OPENAI_API_KEY='{key_value}'\n")
+            f.write("OPENAI_API_BASE_URL='https://api.groq.com/openai/v1'\n")
         load_dotenv(override=True)
+        logger.info("API key saved")
