@@ -8,4 +8,5 @@ ANSI_BLUE = "\033[94m"
 ANSI_BRIGHT_MAGENTA = "\033[95m"
 ANSI_RESET = "\033[0m"
 
+# Fixed: using "blue bold" instead of "ansi blue bold"
 style = Style.from_dict({"prompt": "blue bold"})
