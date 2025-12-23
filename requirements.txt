@@ -1,1 +1,1 @@
-# Core\npython-dotenv>=1.0.0\nloguru>=0.7.0\nopenai>=1.0.0\nprompt-toolkit>=3.0.0\npillow>=10.0.0\n
+# Core\npython-dotenv>=1.0.0\nloguru>=0.7.0\nopenai>=1.0.0\nprompt-toolkit>=3.0.0\npillow>=10.0.0\npyautogui>=0.9.0\n
