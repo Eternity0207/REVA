@@ -42,8 +42,14 @@ class OperatingSystem:
                 x, y = int(w * x_pct), int(h * y_pct)
             else:
                 x, y = int(x_pct), int(y_pct)
-
             pyautogui.moveTo(x, y, duration)
             pyautogui.click(x, y)
         except Exception as e:
             logger.error(f"Click failed: {e}")
+
+    def scroll(self, amount=-10):
+        logger.info("Scrolling")
+        try:
+            pyautogui.scroll(amount)
+        except Exception as e:
+            logger.error(f"Scroll failed: {e}")
