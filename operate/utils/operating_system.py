@@ -25,17 +25,17 @@ class OperatingSystem:
         except Exception as e:
             logger.error(f"Press failed: {e}")
 
-    def mouse(self, click_detail):
+    def mouse(self, click_detail, double=False):
         logger.info("Mouse click")
         try:
             x = convert_percent_to_decimal(click_detail.get("x"))
             y = convert_percent_to_decimal(click_detail.get("y"))
             if x and y:
-                self.click_at_percentage(x, y)
+                self.click_at_percentage(x, y, double=double)
         except Exception as e:
             logger.error(f"Click failed: {e}")
 
-    def click_at_percentage(self, x_pct, y_pct, duration=0.8):
+    def click_at_percentage(self, x_pct, y_pct, duration=0.8, double=False):
         try:
             if x_pct <= 1:
                 w, h = pyautogui.size()
@@ -43,7 +43,10 @@ class OperatingSystem:
             else:
                 x, y = int(x_pct), int(y_pct)
             pyautogui.moveTo(x, y, duration)
-            pyautogui.click(x, y)
+            if double:
+                pyautogui.doubleClick(x, y)
+            else:
+                pyautogui.click(x, y)
         except Exception as e:
             logger.error(f"Click failed: {e}")
 
