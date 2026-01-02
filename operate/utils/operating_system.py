@@ -7,6 +7,8 @@ from operate.utils.misc import convert_percent_to_decimal
 class OperatingSystem:
     def write(self, content):
         logger.info("Typing text")
+        if not content:
+            return
         try:
             content = content.replace("\\n", "\n")
             for char in content:
@@ -16,6 +18,8 @@ class OperatingSystem:
 
     def press(self, keys):
         logger.info(f"Pressing: {keys}")
+        if not keys:
+            return
         try:
             for k in keys:
                 pyautogui.keyDown(k)
@@ -25,17 +29,22 @@ class OperatingSystem:
         except Exception as e:
             logger.error(f"Press failed: {e}")
 
-    def mouse(self, click_detail, double=False):
+    def mouse(self, click_detail):
         logger.info("Mouse click")
+        if not click_detail:
+            logger.warning("No click details")
+            return
         try:
             x = convert_percent_to_decimal(click_detail.get("x"))
             y = convert_percent_to_decimal(click_detail.get("y"))
-            if x and y:
-                self.click_at_percentage(x, y, double=double)
+            if x is not None and y is not None:
+                self.click_at_percentage(x, y)
+            else:
+                logger.warning(f"Invalid coords: {click_detail}")
         except Exception as e:
             logger.error(f"Click failed: {e}")
 
-    def click_at_percentage(self, x_pct, y_pct, duration=0.8, double=False):
+    def click_at_percentage(self, x_pct, y_pct, duration=0.8):
         try:
             if x_pct <= 1:
                 w, h = pyautogui.size()
@@ -43,10 +52,8 @@ class OperatingSystem:
             else:
                 x, y = int(x_pct), int(y_pct)
             pyautogui.moveTo(x, y, duration)
-            if double:
-                pyautogui.doubleClick(x, y)
-            else:
-                pyautogui.click(x, y)
+            pyautogui.click(x, y)
+            logger.debug(f"Clicked at ({x}, {y})")
         except Exception as e:
             logger.error(f"Click failed: {e}")
 
