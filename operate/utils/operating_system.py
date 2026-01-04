@@ -21,11 +21,11 @@ class OperatingSystem:
         if not keys:
             return
         try:
-            for k in keys:
-                pyautogui.keyDown(k)
-            time.sleep(0.1)
-            for k in keys:
-                pyautogui.keyUp(k)
+            # Use hotkey for multiple keys
+            if len(keys) > 1:
+                pyautogui.hotkey(*keys)
+            else:
+                pyautogui.press(keys[0])
         except Exception as e:
             logger.error(f"Press failed: {e}")
 
