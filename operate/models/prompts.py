@@ -5,6 +5,8 @@ from operate.config import Config
 config = Config()
 USER_QUESTION = "What would you like me to do?"
 
+VALID_OPERATIONS = {"click", "write", "press", "scroll", "done"}
+
 SYSTEM_PROMPT_STANDARD = """You are REVA, an AI controlling a {os} computer.
 Analyze the screenshot and execute actions to complete the objective.
 
@@ -56,3 +58,6 @@ def get_user_first_message_prompt():
 
 def get_som_prompt(operation, df):
     return f"Select label for: {operation}"
+
+def validate_operation(op):
+    return op.get("operation", "").lower() in VALID_OPERATIONS
