@@ -17,11 +17,9 @@ OMNIPARSER_URL = os.getenv("OMNIPARSER_URL", "http://localhost:8001")
 GROQ_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 
 def clean_json(content):
-    # Try regex first
     match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', content)
     if match:
         return match.group(0)
-    # Fallback
     if "```json" in content:
         content = content.split("```json")[1].split("```")[0]
     elif "```" in content:
@@ -36,30 +34,24 @@ def get_screenshot_base64():
         return base64.b64encode(f.read()).decode("utf-8"), path
 
 def add_labels(screenshot_path):
-    """Add labels using OmniParser"""
     try:
         with open(screenshot_path, "rb") as f:
             img_b64 = base64.b64encode(f.read()).decode("utf-8")
-
         resp = requests.post(f"{OMNIPARSER_URL}/label/",
                            json={"base64_image": img_b64}, timeout=30)
-
         if resp.status_code == 200:
             result = resp.json()
             labeled_path = screenshot_path.replace(".png", "_labeled.png")
-
             if "labeled_image" in result:
                 with open(labeled_path, "wb") as f:
                     f.write(base64.b64decode(result["labeled_image"]))
-
             return labeled_path, result.get("parsed_content_list", [])
     except Exception as e:
         logger.warning(f"OmniParser unavailable: {e}")
-
     return screenshot_path, []
 
 def call_groq_vision(messages):
-    logger.debug("Calling Groq")
+    logger.debug("Calling Groq Vision API")
     time.sleep(1)
     client = config.initialize_groq()
 
@@ -75,11 +67,14 @@ def call_groq_vision(messages):
             ]
         })
 
+        logger.debug(f"Request messages: {len(messages)}")
         response = client.chat.completions.create(
             model=GROQ_MODEL, messages=messages, max_tokens=1024
         )
 
-        content = clean_json(response.choices[0].message.content)
+        raw_content = response.choices[0].message.content
+        logger.debug(f"Raw response: {raw_content[:200]}...")
+        content = clean_json(raw_content)
         messages.append({"role": "assistant", "content": content})
 
         return [json.loads(content), messages]
