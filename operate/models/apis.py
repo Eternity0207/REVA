@@ -17,13 +17,32 @@ OMNIPARSER_URL = os.getenv("OMNIPARSER_URL", "http://localhost:8001")
 GROQ_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 
 def clean_json(content):
-    match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', content)
-    if match:
-        return match.group(0)
+    """Extract JSON array from LLM response"""
+    content = content.strip()
+
+    # Method 1: Find JSON array with regex
+    patterns = [
+        r'\[\s*\{[\s\S]*?\}\s*\]',  # [{...}]
+        r'\[[\s\S]*?\](?=\s*$)',         # Array at end
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, content)
+        if match:
+            try:
+                json.loads(match.group(0))
+                return match.group(0)
+            except:
+                continue
+
+    # Method 2: Code block extraction
     if "```json" in content:
         content = content.split("```json")[1].split("```")[0]
     elif "```" in content:
-        content = content.split("```")[1].split("```")[0]
+        parts = content.split("```")
+        if len(parts) >= 2:
+            content = parts[1]
+
     return content.strip()
 
 def get_screenshot_base64():
@@ -37,8 +56,10 @@ def add_labels(screenshot_path):
     try:
         with open(screenshot_path, "rb") as f:
             img_b64 = base64.b64encode(f.read()).decode("utf-8")
+
         resp = requests.post(f"{OMNIPARSER_URL}/label/",
                            json={"base64_image": img_b64}, timeout=30)
+
         if resp.status_code == 200:
             result = resp.json()
             labeled_path = screenshot_path.replace(".png", "_labeled.png")
@@ -51,7 +72,7 @@ def add_labels(screenshot_path):
     return screenshot_path, []
 
 def call_groq_vision(messages):
-    logger.debug("Calling Groq Vision API")
+    logger.debug("Calling Groq Vision")
     time.sleep(1)
     client = config.initialize_groq()
 
@@ -67,17 +88,24 @@ def call_groq_vision(messages):
             ]
         })
 
-        logger.debug(f"Request messages: {len(messages)}")
         response = client.chat.completions.create(
             model=GROQ_MODEL, messages=messages, max_tokens=1024
         )
 
         raw_content = response.choices[0].message.content
-        logger.debug(f"Raw response: {raw_content[:200]}...")
         content = clean_json(raw_content)
-        messages.append({"role": "assistant", "content": content})
 
-        return [json.loads(content), messages]
+        try:
+            operations = json.loads(content)
+            if not isinstance(operations, list):
+                operations = [operations]
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse failed: {e}\nRaw: {raw_content}")
+            operations = [{"operation": "done", "summary": "Parse error"}]
+
+        messages.append({"role": "assistant", "content": content})
+        return [operations, messages]
+
     except Exception as e:
         logger.error(f"API call failed: {e}")
         return [[{"operation": "done", "summary": f"Error: {e}"}], messages]
