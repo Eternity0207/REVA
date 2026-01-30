@@ -16,25 +16,34 @@ config = Config()
 operating_system = OperatingSystem()
 
 def main(model, terminal_prompt=None, voice_mode=False, verbose_mode=False):
-    """Main entry point"""
     config.verbose = verbose_mode
 
     if config.validation(model, voice_mode):
-        print(f"{ANSI_RED}Error: API key not set{ANSI_RESET}")
+        print(f"{ANSI_RED}Error: API key not configured{ANSI_RESET}")
         return
 
-    print(f"{ANSI_GREEN}[REVA]{ANSI_RESET} Starting...")
+    print(f"\n{ANSI_GREEN}[REVA]{ANSI_RESET} AI OS Controller")
+    print(f"{ANSI_BRIGHT_MAGENTA}Model:{ANSI_RESET} Groq ({model})")
+    print("-" * 40)
 
     objective = terminal_prompt or input(f"{USER_QUESTION}\n> ")
+
+    if config.verbose:
+        logger.info(f"Objective: {objective}")
 
     system_prompt = get_system_prompt(model, objective)
     messages = [{"role": "system", "content": system_prompt}]
 
     session_id = None
+    loop_count = 0
+    max_loops = 30
 
-    for i in range(30):
+    while loop_count < max_loops:
         time.sleep(2)
-        logger.info(f"Loop {i+1}")
+        loop_count += 1
+
+        if config.verbose:
+            print(f"\n{ANSI_BLUE}[Loop {loop_count}/{max_loops}]{ANSI_RESET}")
 
         try:
             [operations, messages], session_id = asyncio.run(
@@ -44,34 +53,54 @@ def main(model, terminal_prompt=None, voice_mode=False, verbose_mode=False):
             if operate(operations, model):
                 break
 
+        except ModelNotRecognizedException as e:
+            print(f"{ANSI_RED}Model error: {e}{ANSI_RESET}")
+            break
         except Exception as e:
             print(f"{ANSI_RED}Error: {e}{ANSI_RESET}")
+            if config.verbose:
+                logger.exception(e)
             break
 
+    print(f"\n{ANSI_GREEN}[REVA]{ANSI_RESET} Session complete")
+
 def operate(operations, model):
-    """Execute operations"""
+    logger.info(f"Executing {len(operations)} operations")
+
     for op in operations:
         time.sleep(1)
         op_type = op.get("operation", "").lower()
         thought = op.get("thought", "")
 
-        print(f"{ANSI_BLUE}Action:{ANSI_RESET} {op_type}")
-        if thought:
-            print(f"  Thought: {thought}")
-
         if op_type == "press":
-            operating_system.press(op.get("keys", []))
+            keys = op.get("keys", [])
+            operating_system.press(keys)
+            print(f"  {ANSI_BLUE}Press:{ANSI_RESET} {keys}")
+
         elif op_type == "write":
-            operating_system.write(op.get("content", ""))
+            content = op.get("content", "")
+            operating_system.write(content)
+            print(f"  {ANSI_BLUE}Type:{ANSI_RESET} {content[:50]}...")
+
         elif op_type == "click":
-            operating_system.mouse({"x": op.get("x"), "y": op.get("y")})
+            x, y = op.get("x"), op.get("y")
+            operating_system.mouse({"x": x, "y": y})
+            print(f"  {ANSI_BLUE}Click:{ANSI_RESET} ({x}, {y})")
+
         elif op_type == "scroll":
             operating_system.scroll()
+            print(f"  {ANSI_BLUE}Scroll{ANSI_RESET}")
+
         elif op_type == "done":
-            print(f"{ANSI_GREEN}Done:{ANSI_RESET} {op.get('summary')}")
+            summary = op.get("summary", "Complete")
+            print(f"\n{ANSI_GREEN}Complete:{ANSI_RESET} {summary}")
             return True
+
         else:
-            print(f"{ANSI_RED}Unknown: {op_type}{ANSI_RESET}")
+            print(f"  {ANSI_RED}Unknown:{ANSI_RESET} {op_type}")
             return True
+
+        if thought and config.verbose:
+            print(f"    Thought: {thought}")
 
     return False
