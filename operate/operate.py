@@ -3,10 +3,9 @@ import sys
 import os
 import time
 import asyncio
-import platform
+import signal
 from loguru import logger
 from operate.config import Config
-from operate.exceptions import ModelNotRecognizedException
 from operate.models.prompts import USER_QUESTION, get_system_prompt
 from operate.utils.style import ANSI_GREEN, ANSI_RED, ANSI_BLUE, ANSI_RESET, ANSI_BRIGHT_MAGENTA
 from operate.utils.operating_system import OperatingSystem
@@ -14,6 +13,12 @@ from operate.models.apis import get_next_action
 
 config = Config()
 operating_system = OperatingSystem()
+
+def signal_handler(sig, frame):
+    print(f"\n{ANSI_YELLOW}[REVA]{ANSI_RESET} Interrupted by user")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
 
 def main(model, terminal_prompt=None, voice_mode=False, verbose_mode=False):
     config.verbose = verbose_mode
