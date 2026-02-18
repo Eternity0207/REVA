@@ -4,6 +4,7 @@ import platform
 import subprocess
 import base64
 import json
+import re
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -27,6 +28,7 @@ class APIKeyRequest(BaseModel):
     api_key: str
 
 GROQ_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+command_history = []
 
 def check_permissions():
     perms = {"screenshot": False, "keyboard": False, "mouse": False}
@@ -60,27 +62,29 @@ def execute_action(action):
 
     if op == "click":
         x, y = action.get("x", 0.5), action.get("y", 0.5)
-        if x <= 1:
+        if isinstance(x, (int, float)) and x <= 1:
             w, h = pyautogui.size()
             x, y = int(w * x), int(h * y)
-        pyautogui.click(x, y)
-        return {"action": "click", "x": x, "y": y}
+        pyautogui.click(int(x), int(y))
+        return {"success": True, "action": "click"}
     elif op == "write":
-        pyautogui.write(action.get("content", ""))
-        return {"action": "write"}
+        pyautogui.write(action.get("content", ""), interval=0.02)
+        return {"success": True, "action": "write"}
     elif op == "press":
-        pyautogui.hotkey(*action.get("keys", []))
-        return {"action": "press"}
+        keys = action.get("keys", [])
+        if keys:
+            pyautogui.hotkey(*keys)
+        return {"success": True, "action": "press"}
     elif op == "scroll":
         pyautogui.scroll(-5)
-        return {"action": "scroll"}
+        return {"success": True, "action": "scroll"}
     elif op == "done":
-        return {"action": "done", "summary": action.get("summary")}
-    return {"action": "unknown"}
+        return {"success": True, "action": "done", "summary": action.get("summary")}
+    return {"success": False, "error": f"Unknown: {op}"}
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return "<h1>REVA Web Server</h1><p>API: /api/*</p>"
+    return "<h1>REVA Web Server</h1><p>API at /api/*</p>"
 
 @app.get("/api/health")
 async def health():
@@ -102,19 +106,20 @@ async def save_key(request: APIKeyRequest):
 async def screenshot():
     img = capture_screenshot()
     if img:
-        return {"screenshot": img}
+        return {"screenshot": img, "timestamp": datetime.now().isoformat()}
     raise HTTPException(500, "Screenshot failed")
+
+@app.get("/api/history")
+async def history():
+    return {"history": command_history[-50:]}
 
 @app.post("/api/execute")
 async def execute(request: CommandRequest):
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(400, "API key not set")
 
-    perms = check_permissions()
-    if not all(perms.values()):
-        raise HTTPException(403, "Permissions not granted")
+    command_history.append({"command": request.command, "time": datetime.now().isoformat()})
 
-    # Call LLM
     client = OpenAI(
         api_key=os.getenv("OPENAI_API_KEY"),
         base_url=os.getenv("OPENAI_API_BASE_URL", "https://api.groq.com/openai/v1")
@@ -123,14 +128,8 @@ async def execute(request: CommandRequest):
     img_b64 = capture_screenshot()
 
     prompt = f"""You are REVA controlling a {platform.system()} computer.
-RESPOND WITH ONLY JSON ARRAY. No text.
-
-Actions:
-- click: {{"operation": "click", "x": 0.5, "y": 0.5, "thought": "why"}}
-- write: {{"operation": "write", "content": "text", "thought": "why"}}
-- press: {{"operation": "press", "keys": ["super"], "thought": "why"}}
-- done: {{"operation": "done", "summary": "what", "thought": "why"}}
-
+RESPOND WITH ONLY JSON ARRAY.
+Actions: click, write, press, scroll, done
 Objective: {request.command}"""
 
     messages = [
@@ -144,8 +143,6 @@ Objective: {request.command}"""
     resp = client.chat.completions.create(model=GROQ_MODEL, messages=messages, max_tokens=1024)
     content = resp.choices[0].message.content.strip()
 
-    # Extract JSON
-    import re
     match = re.search(r'\[.*\]', content, re.DOTALL)
     if match:
         content = match.group(0)
@@ -157,7 +154,5 @@ Objective: {request.command}"""
 
 if __name__ == "__main__":
     import uvicorn
-    print("=" * 50)
     print("REVA Web Server: http://localhost:8002")
-    print("=" * 50)
     uvicorn.run(app, host="0.0.0.0", port=8002)
