@@ -1,18 +1,30 @@
 # REVA Server API Documentation
 
-## Overview
-Comprehensive REST API for REVA autonomous agent.
+## Base URL
+`http://localhost:8002`
 
 ## Endpoints
 
-### Task Management
-- POST /execute - Submit task
-- GET /tasks - List tasks
-- GET /tasks/{id} - Get task details
+### Health Check
+`GET /api/health`
 
-### Task Control
-- PATCH /tasks/{id} - Pause/resume/cancel task
+### Permissions
+`GET /api/permissions`
 
-### System
-- GET /health - Health check
-- GET /queue - Queue status
+### Save API Key
+`POST /api/key`
+```json
+{"api_key": "gsk_..."}
+```
+
+### Screenshot
+`GET /api/screenshot`
+
+### Execute Command
+`POST /api/execute`
+```json
+{"command": "Open Firefox"}
+```
+
+### Command History
+`GET /api/history`
