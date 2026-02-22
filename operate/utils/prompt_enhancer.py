@@ -1,3 +1,5 @@
+"""Prompt utilities"""
+
 def prompt_enhancement(prompt):
-    """Optimize prompt for Groq LLM models"""
-    return prompt + "\nProvide response in JSON format."
+    """Enhance prompt"""
+    return prompt + "\nRespond with JSON array only."
