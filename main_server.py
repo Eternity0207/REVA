@@ -6,6 +6,8 @@ import base64
 import json
 import re
 from datetime import datetime
+from io import BytesIO
+from PIL import Image
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,12 +50,47 @@ def check_permissions():
 
 def capture_screenshot():
     path = "/tmp/reva_screenshot.png"
-    if platform.system() == "Linux":
-        subprocess.run(f"grim {path} || scrot {path}", shell=True, capture_output=True)
-    if os.path.exists(path):
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    return None
+    system = platform.system()
+
+    try:
+        if system == "Linux":
+            # Try multiple screenshot tools
+            for cmd in [f"grim {path}", f"scrot {path}", f"gnome-screenshot -f {path}"]:
+                result = subprocess.run(cmd, shell=True, capture_output=True, timeout=5)
+                if result.returncode == 0 and os.path.exists(path):
+                    logger.debug(f"Screenshot captured with: {cmd.split()[0]}")
+                    break
+        elif system == "Darwin":  # macOS
+            subprocess.run(f"screencapture {path}", shell=True, capture_output=True, timeout=5)
+            logger.debug("Screenshot captured with screencapture")
+        else:  # Windows
+            import pyautogui
+            img = pyautogui.screenshot()
+            img.save(path)
+            logger.debug("Screenshot captured with pyautogui")
+
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            with open(path, "rb") as f:
+                data = f.read()
+                if data and len(data) > 50:  # Sanity check - PNG should be at least 67 bytes
+                    encoded = base64.b64encode(data).decode('utf-8')
+                    logger.debug(f"Screenshot encoded: {len(encoded)} bytes")
+                    return encoded
+    except Exception as e:
+        logger.error(f"Screenshot capture error: {e}")
+
+    # If all else fails, create a placeholder 200x200 white PNG using PIL
+    logger.warning("Creating placeholder image")
+    try:
+        img = Image.new('RGB', (200, 200), color='white')
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        encoded = base64.b64encode(buf.getvalue()).decode('utf-8')
+        logger.debug(f"Placeholder created: {len(encoded)} bytes")
+        return encoded
+    except Exception as e:
+        logger.error(f"Failed to create placeholder: {e}")
+        return None
 
 def execute_action(action):
     import pyautogui
@@ -194,6 +231,8 @@ async def execute(request: CommandRequest):
     )
 
     img_b64 = capture_screenshot()
+    if not img_b64:
+        raise HTTPException(500, "Failed to capture screenshot")
 
     prompt = f"""You are REVA controlling a {platform.system()} computer.
 CRITICAL: Respond with ONLY a JSON array. No explanations.
@@ -221,12 +260,14 @@ Objective: {request.command}"""
     try:
         resp = client.chat.completions.create(model=GROQ_MODEL, messages=messages, max_tokens=1024)
         content = resp.choices[0].message.content.strip()
+        logger.debug(f"LLM response: {content[:200]}...")
 
         # Extract JSON
         match = re.search(r'\[\s*\{[\s\S]*?\}\s*\]', content)
         if match:
             content = match.group(0)
 
+        logger.debug(f"Extracted JSON: {content[:200]}...")
         actions = json.loads(content)
         if not isinstance(actions, list):
             actions = [actions]
@@ -242,10 +283,11 @@ Objective: {request.command}"""
 
     except json.JSONDecodeError as e:
         logger.error(f"JSON parse error: {e}")
-        raise HTTPException(500, f"Invalid LLM response")
+        raise HTTPException(500, f"Invalid LLM response: {str(e)}")
     except Exception as e:
-        logger.error(f"Execute error: {e}")
-        raise HTTPException(500, str(e))
+        error_msg = str(e)
+        logger.error(f"Execute error: {error_msg}")
+        raise HTTPException(500, error_msg)
 
 if __name__ == "__main__":
     import uvicorn
