@@ -33,19 +33,57 @@ GROQ_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-in
 
 def check_permissions():
     perms = {"screenshot": False, "keyboard": False, "mouse": False}
-    if platform.system() == "Linux":
+    system = platform.system()
+    
+    # Check screenshot capability
+    if system == "Linux":
         for tool in ["grim", "scrot"]:
             if subprocess.run(["which", tool], capture_output=True).returncode == 0:
                 perms["screenshot"] = True
                 break
-    else:
+    elif system == "Darwin":  # macOS
+        # Try to capture screenshot to verify permissions
+        try:
+            result = subprocess.run(["screencapture", "-x", "/tmp/test.png"], 
+                                  capture_output=True, timeout=2)
+            if result.returncode == 0:
+                perms["screenshot"] = True
+                subprocess.run(["rm", "/tmp/test.png"], capture_output=True)
+        except:
+            pass
+    else:  # Windows
         perms["screenshot"] = True
+    
+    # Check keyboard and mouse control
     try:
         import pyautogui
-        pyautogui.size()
-        perms["keyboard"] = perms["mouse"] = True
-    except:
-        pass
+        # Try to get screen size (requires X11 permission on Linux)
+        w, h = pyautogui.size()
+        if w > 0 and h > 0:
+            perms["keyboard"] = perms["mouse"] = True
+    except Exception as e:
+        # If pyautogui fails, try alternative methods
+        if system == "Linux":
+            # Try xdotool as fallback
+            if subprocess.run(["which", "xdotool"], capture_output=True).returncode == 0:
+                try:
+                    result = subprocess.run(["xdotool", "getactivewindow"], 
+                                          capture_output=True, timeout=2)
+                    if result.returncode == 0:
+                        perms["keyboard"] = perms["mouse"] = True
+                except:
+                    pass
+        elif system == "Darwin":  # macOS - check accessibility permissions
+            try:
+                # Try to use osascript to test accessibility
+                result = subprocess.run(["osascript", "-e", 
+                                       "tell application \"System Events\" to keystroke \"x\""],
+                                      capture_output=True, timeout=2)
+                if "not permitted" not in result.stderr.decode().lower():
+                    perms["keyboard"] = perms["mouse"] = True
+            except:
+                pass
+    
     return perms
 
 def capture_screenshot():
@@ -427,6 +465,38 @@ Objective: {request.command}"""
 
 if __name__ == "__main__":
     import uvicorn
+    
+    # Check and request permissions on startup
+    print("=" * 50)
+    print("Checking system permissions...")
+    print("=" * 50)
+    
+    perms = check_permissions()
+    for perm, status in perms.items():
+        status_str = "✅ Available" if status else "❌ Not Available"
+        print(f"  {perm.capitalize()}: {status_str}")
+    
+    if not all(perms.values()):
+        missing = [k for k, v in perms.items() if not v]
+        print("\n⚠️  Missing capabilities:", ", ".join(missing))
+        print("\nTo enable these features:")
+        
+        if platform.system() == "Linux":
+            if "screenshot" in missing:
+                print("  • Screenshot: sudo apt install grim scrot")
+            if "keyboard" in missing or "mouse" in missing:
+                print("  • Keyboard/Mouse: sudo apt install python3-pip xdotool")
+                print("                   pip install pyautogui xlib")
+        elif platform.system() == "Darwin":
+            print("  • macOS: Go to System Preferences > Security & Privacy > Accessibility")
+            print("           Add your terminal/IDE to the allowed apps list")
+        elif platform.system() == "Windows":
+            print("  • Windows: Run the app as Administrator")
+        
+        print("\nStarting anyway (will fail on execute)...\n")
+    else:
+        print("\n✅ All permissions available!\n")
+    
     print("=" * 50)
     print("REVA Web Server: http://localhost:8002")
     print("=" * 50)
