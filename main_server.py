@@ -285,26 +285,17 @@ showPermModal();
 return;
 }
 
-// Check system capabilities
-log('🔍 Checking system capabilities...');
-try{
-const r=await fetch('/api/verify-capabilities');
-const data=await r.json();
-if(!data.all_available){
-log('❌ System missing capabilities: '+data.missing.join(', '),'error');
-log('📋 Please install missing tools and try again.','error');
-return;
-}
-}catch(e){
-log('⚠️ Could not verify system capabilities: '+e.message,'error');
-return;
-}
-
 log('⚙️ Executing: '+c);
 try{
 const r=await fetch('/api/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:c})});
 const d=await r.json();
-if(r.ok){log('✓ Success: '+JSON.stringify(d.actions))}else{log('Error: '+d.detail,'error')}
+if(r.ok){log('✓ Success: '+JSON.stringify(d.actions))}else{
+if(d.detail && d.detail.includes('Permissions not granted')){
+log('❌ VM missing system capabilities. Admin needs to install tools.','error');
+}else{
+log('Error: '+d.detail,'error');
+}
+}
 }catch(e){log('Error: '+e.message,'error')}
 }
 document.getElementById('cmd').addEventListener('keypress',e=>{if(e.key=='Enter')execute()});
@@ -312,36 +303,12 @@ async function initApp(){
 permissionsGranted=checkUserPerms();
 updatePermDisplay();
 
-// Check system capabilities
-log('🔍 Checking system capabilities...');
-try{
-const r=await fetch('/api/verify-capabilities');
-const data=await r.json();
-if(data.all_available){
-log('✅ System capabilities: All available');
-}else{
-log('⚠️ System missing: '+data.missing.join(', '),'error');
-log('📋 Install these tools to enable full functionality:','error');
-if(data.missing.includes('screenshot')){
-log('   • Linux: sudo apt install grim scrot','error');
-log('   • macOS: brew install screencapture','error');
-log('   • Windows: Run as Administrator','error');
-}
-if(data.missing.includes('keyboard') || data.missing.includes('mouse')){
-log('   • Linux: sudo apt install python3-pip && pip install pyautogui xlib','error');
-log('   • macOS: Grant accessibility permissions in System Preferences','error');
-log('   • Windows: Run as Administrator','error');
-}
-}
-}catch(e){
-log('⚠️ Could not check capabilities: '+e.message,'error');
-}
-
 if(!permissionsGranted){
 log('⚠️ Browser permission required to use this app.');
 showPermModal();
 }else{
-log('✅ Ready to execute commands.');
+log('✅ Browser permission granted. Ready to execute commands.');
+log('📋 VM will handle system capabilities. Commands sent to: '+window.location.origin);
 }
 }
 initApp();
