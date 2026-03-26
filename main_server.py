@@ -277,11 +277,29 @@ if(r.ok){log('🔑 API Key saved successfully');updatePermDisplay()}else{log('Sa
 async function execute(){
 const c=document.getElementById('cmd').value;
 if(!c){log('Enter command','error');return}
+
+// Check browser permission first
 if(!permissionsGranted){
-log('❌ Permission required. Please grant permission first.','error');
+log('❌ Browser permission required. Please grant permission first.','error');
 showPermModal();
 return;
 }
+
+// Check system capabilities
+log('🔍 Checking system capabilities...');
+try{
+const r=await fetch('/api/verify-capabilities');
+const data=await r.json();
+if(!data.all_available){
+log('❌ System missing capabilities: '+data.missing.join(', '),'error');
+log('📋 Please install missing tools and try again.','error');
+return;
+}
+}catch(e){
+log('⚠️ Could not verify system capabilities: '+e.message,'error');
+return;
+}
+
 log('⚙️ Executing: '+c);
 try{
 const r=await fetch('/api/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:c})});
@@ -293,8 +311,34 @@ document.getElementById('cmd').addEventListener('keypress',e=>{if(e.key=='Enter'
 async function initApp(){
 permissionsGranted=checkUserPerms();
 updatePermDisplay();
+
+// Check system capabilities
+log('🔍 Checking system capabilities...');
+try{
+const r=await fetch('/api/verify-capabilities');
+const data=await r.json();
+if(data.all_available){
+log('✅ System capabilities: All available');
+}else{
+log('⚠️ System missing: '+data.missing.join(', '),'error');
+log('📋 Install these tools to enable full functionality:','error');
+if(data.missing.includes('screenshot')){
+log('   • Linux: sudo apt install grim scrot','error');
+log('   • macOS: brew install screencapture','error');
+log('   • Windows: Run as Administrator','error');
+}
+if(data.missing.includes('keyboard') || data.missing.includes('mouse')){
+log('   • Linux: sudo apt install python3-pip && pip install pyautogui xlib','error');
+log('   • macOS: Grant accessibility permissions in System Preferences','error');
+log('   • Windows: Run as Administrator','error');
+}
+}
+}catch(e){
+log('⚠️ Could not check capabilities: '+e.message,'error');
+}
+
 if(!permissionsGranted){
-log('⚠️ Permission required to use this app.');
+log('⚠️ Browser permission required to use this app.');
 showPermModal();
 }else{
 log('✅ Ready to execute commands.');
@@ -348,7 +392,7 @@ async def execute(request: CommandRequest):
 
     perms = check_permissions()
     if not all(perms.values()):
-        raise HTTPException(403, "Permissions not granted")
+        raise HTTPException(403, f"System permissions not available: {[k for k,v in perms.items() if not v]}")
 
     client = OpenAI(
         api_key=os.getenv("OPENAI_API_KEY"),
