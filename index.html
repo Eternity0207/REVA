@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REVA - AI OS Control Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+            padding: 20px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .container {
+            background: white;
+            border-radius: 24px;
+            padding: 60px 50px;
+            max-width: 900px;
+            width: 100%;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.2), 0 0 60px rgba(102, 126, 234, 0.15);
+            position: relative;
+            z-index: 1;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            border-bottom: 3px solid #f0f0f0;
+            padding-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 3em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            letter-spacing: -1px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .section {
+            margin-bottom: 50px;
+            padding-bottom: 40px;
+            border-bottom: 2px solid #f5f5f5;
+        }
+
+        .section:last-of-type {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .section h2 {
+            font-size: 1.6em;
+            color: #667eea;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section h2::before {
+            content: '';
+            width: 4px;
+            height: 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 40px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            width: 100%;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 0.95em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #667eea;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .form-group input {
+            flex: 1;
+            padding: 13px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.95em;
+            font-family: 'Courier New', monospace;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            background: #fafafa;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+
+        .copy-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 13px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            min-width: 90px;
+            white-space: nowrap;
+        }
+
+        .copy-btn:hover {
+            background: #764ba2;
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .copy-btn.copied {
+            background: #10b981;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, #f0f4ff 0%, #f8f5ff 100%);
+            border-left: 5px solid #667eea;
+            padding: 20px;
+            border-radius: 8px;
+            color: #555;
+            font-size: 0.95em;
+            line-height: 1.8;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.08);
+        }
+
+        .info-box strong {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .credentials-status {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        .os-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            margin-top: 12px;
+            font-weight: 600;
+        }
+
+        .docs-link {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 30px;
+            border-top: 2px solid #f5f5f5;
+        }
+
+        .docs-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            margin: 0 15px;
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+
+        .docs-link a:hover {
+            color: #764ba2;
+            transform: translateY(-2px);
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 25px;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, #f0f4ff 0%, #f8f5ff 100%);
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid #e8e8f5;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.15);
+        }
+
+        .feature-card strong {
+            color: #667eea;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
+
+        .feature-card p {
+            color: #666;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .detection-info {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #856404;
+        }
+
+        .detection-info code {
+            background: rgba(0,0,0,0.1);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 25px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .header p {
+                font-size: 1em;
+            }
+
+            .section h2 {
+                font-size: 1.3em;
+            }
+
+            .form-row {
+                flex-direction: column;
+            }
+
+            .copy-btn {
+                width: 100%;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .docs-link a {
+                display: block;
+                margin: 10px 0;
+            }
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🤖 REVA</h1>
+            <p>Remote Execution & Visualization Agent</p>
+            <p style="font-size: 0.95em; color: #999; margin-top: 10px;">AI-Powered OS Control System</p>
+        </div>
+
+        <!-- Download Section -->
+        <div class="section">
+            <h2>📥 Get Started</h2>
+            <button class="download-btn" onclick="downloadForOS()">
+                ⬇️ Download REVA Desktop App
+            </button>
+            <p id="os-info" style="text-align: center; color: #999; font-size: 0.9em; margin-top: 12px;"></p>
+            
+            <div class="info-box">
+                <strong>Installation Steps:</strong><br>
+                1. Click the download button above<br>
+                2. Run the downloaded file on your computer<br>
+                3. The app will launch automatically<br>
+                4. Use the credentials below to connect<br>
+                5. Start executing commands
+            </div>
+
+            <div class="detection-info">
+                <strong>🔍 Server Detection:</strong> Your server URL is automatically detected and shown below. No manual configuration needed!
+            </div>
+        </div>
+
+        <!-- Credentials Section -->
+        <div class="section">
+            <h2>🔑 Connection Credentials</h2>
+            
+            <div class="form-group">
+                <label>Agent ID</label>
+                <div class="form-row">
+                    <input type="text" id="agentId" value="my-agent" readonly>
+                    <button class="copy-btn" onclick="copy('agentId')">📋 Copy</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Authentication Token</label>
+                <div class="form-row">
+                    <input type="text" id="token" value="my-secret-token" readonly>
+                    <button class="copy-btn" onclick="copy('token')">📋 Copy</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Server URL (Auto-Detected)</label>
+                <div class="form-row">
+                    <input type="text" id="server" value="Loading..." readonly>
+                    <button class="copy-btn" onclick="copy('server')">📋 Copy</button>
+                </div>
+            </div>
+
+            <div class="credentials-status">✓ Ready to Connect</div>
+
+            <div class="info-box">
+                <strong>💡 How it works:</strong><br>
+                The server URL is automatically detected from your current browser connection. This means it works whether you access from localhost, a domain, or any server URL. Just copy these credentials into the REVA app's Settings tab!
+            </div>
+        </div>
+
+        <!-- Authentication Guide -->
+        <div class="section">
+            <h2>🔐 How Authentication Works</h2>
+            
+            <div style="background: #f9f9f9; padding: 25px; border-radius: 12px; margin-top: 20px; border: 2px solid #f0f0f0;">
+                <h3 style="color: #667eea; margin-top: 0; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">Agent Authentication Flow</h3>
+                <ol style="margin-left: 30px; color: #555;">
+                    <li style="margin-bottom: 15px;">
+                        <strong>Agent Registration:</strong> The REVA desktop app sends its agent_id and token to the server
+                    </li>
+                    <li style="margin-bottom: 15px;">
+                        <strong>Token Verification:</strong> Server validates the token against known agents
+                    </li>
+                    <li style="margin-bottom: 15px;">
+                        <strong>Polling for Tasks:</strong> Agent polls for pending tasks every 5 seconds
+                    </li>
+                    <li style="margin-bottom: 15px;">
+                        <strong>Task Execution:</strong> Agent executes commands and reports results
+                    </li>
+                </ol>
+            </div>
+
+            <div class="info-box">
+                <strong>🔒 Security Notes:</strong><br>
+                • Tokens are validated on every request<br>
+                • Only authenticated agents can fetch and execute tasks<br>
+                • Results are encrypted during transmission<br>
+                • Each agent maintains independent task queue<br>
+                • Failed authentication returns 403 Forbidden<br>
+                <strong style="color: #d32f2f; margin-top: 10px; display: block;">⚠️ Production:</strong> Change default credentials before deploying to production!
+            </div>
+        </div>
+
+        <!-- Features Section -->
+        <div class="section">
+            <h2>✨ Key Features</h2>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <strong>🎯 Multi-Agent Support</strong>
+                    <p>Run multiple agents simultaneously with independent task queues and status tracking</p>
+                </div>
+                <div class="feature-card">
+                    <strong>🔄 Task Pipeline</strong>
+                    <p>Queue, dispatch, execute, and monitor tasks with full status visibility</p>
+                </div>
+                <div class="feature-card">
+                    <strong>🛡️ Secure Authentication</strong>
+                    <p>Token-based auth with per-request validation and authorization checks</p>
+                </div>
+                <div class="feature-card">
+                    <strong>💾 Persistent Logging</strong>
+                    <p>Complete audit trail of all executed commands and results</p>
+                </div>
+                <div class="feature-card">
+                    <strong>📊 Real-time Status</strong>
+                    <p>Monitor agent health, task progress, and system capabilities</p>
+                </div>
+                <div class="feature-card">
+                    <strong>🚀 Serverless Ready</strong>
+                    <p>Deploy on single VM with unified port architecture</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documentation -->
+        <div class="docs-link">
+            <strong style="color: #667eea;">Learn More:</strong><br>
+            <a href="/guide">📖 Quick Start Guide</a> • 
+            <a href="/docs">📚 Full Documentation</a> •
+            <a href="/api/health" target="_blank">🏥 API Health Check</a>
+        </div>
+    </div>
+
+    <script>
+        async function detectServerAndOS() {
+            try {
+                // Get server config from API
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                // Update server URL
+                document.getElementById('server').value = config.server_url;
+                
+                // Update agent ID and token if needed
+                document.getElementById('agentId').value = config.agent_id;
+                document.getElementById('token').value = config.token;
+                
+            } catch (error) {
+                // Fallback: use current location
+                const serverUrl = window.location.origin;
+                document.getElementById('server').value = serverUrl;
+            }
+            
+            // Detect OS
+            const userAgent = navigator.userAgent;
+            let osName = "Unknown OS";
+
+            if (userAgent.indexOf('Win') > -1) {
+                osName = "Windows";
+            } else if (userAgent.indexOf('Mac') > -1) {
+                osName = "macOS";
+            } else if (userAgent.indexOf('Linux') > -1 || userAgent.indexOf('X11') > -1) {
+                osName = "Linux";
+            }
+
+            document.getElementById('os-info').innerHTML = `<span class="os-badge">✓ Detected: ${osName}</span>`;
+        }
+
+        function downloadForOS() {
+            window.location.href = `/dist/REVA`;
+        }
+
+        function copy(elementId) {
+            const element = document.getElementById(elementId);
+            element.select();
+            document.execCommand('copy');
+            
+            const btn = event.target;
+            const original = btn.textContent;
+            btn.textContent = '✓ Copied!';
+            btn.classList.add('copied');
+            
+            setTimeout(() => {
+                btn.textContent = original;
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+
+        window.addEventListener('load', detectServerAndOS);
+    </script>
+</body>
+</html>
