@@ -145,7 +145,7 @@ button{padding:14px 24px;border:none;border-radius:8px;font-size:1rem;cursor:poi
 <h1>REVA</h1>
 <p class="subtitle">AI OS Controlling Agent</p>
 <div id="permModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:1000;display:flex;align-items:center;justify-content:center">
-<div style="background:#111;border-radius:12px;padding:32px;max-width:500px;text-align:center;border:2px solid #60A5FA">
+<div style="background:#111;border-radius:12px;padding:32px;max-width:550px;max-height:90vh;overflow-y:auto;text-align:center;border:2px solid #60A5FA">
 <h2 style="margin-bottom:16px;color:#60A5FA">⚠️ Permissions Required</h2>
 <p style="margin-bottom:24px;color:#9CA3AF">Grant permissions to execute commands on the VM?</p>
 <div style="text-align:left;background:#1a1a2e;border-radius:8px;padding:16px;margin-bottom:24px">
@@ -156,9 +156,21 @@ button{padding:14px 24px;border:none;border-radius:8px;font-size:1rem;cursor:poi
 ✓ Control the VM remotely
 </div>
 </div>
-<div style="display:flex;gap:12px;margin-top:24px">
-<button id="grantBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#8B5CF6);color:white;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="grantPermissions()">✓ Grant Permissions</button>
-<button id="denyBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:#374151;color:#e0e0e0;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="denyPermissions()">Deny</button>
+<div id="capStatus" style="text-align:left;background:#0f172a;border-radius:8px;padding:16px;margin-bottom:24px;color:#9CA3AF;font-size:0.85rem;max-height:200px;overflow-y:auto;display:none">
+<strong style="color:#F87171">⚠️ Missing Capabilities:</strong>
+<div id="missingList" style="margin-top:8px;color:#FECACA"></div>
+<div style="margin-top:12px;color:#9CA3AF;border-top:1px solid #1e293b;padding-top:12px">
+<strong>How to Fix:</strong>
+<div style="margin-top:8px;font-size:0.8rem">
+<div style="margin-bottom:8px"><strong>For Linux:</strong> Install screenshot tools:<br><code style="background:#000;padding:2px 6px;border-radius:3px;display:inline-block">apt install grim scrot</code></div>
+<div><strong>For macOS/Windows:</strong> Run with admin privileges</div>
+</div>
+</div>
+</div>
+<div style="display:flex;gap:12px;margin-top:24px;flex-wrap:wrap">
+<button id="grantBtn" style="flex:1;min-width:120px;padding:12px;border:none;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#8B5CF6);color:white;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="grantPermissions()">✓ Grant Permissions</button>
+<button id="forceBtn" style="flex:1;min-width:120px;padding:12px;border:none;border-radius:8px;background:#F97316;color:white;font-weight:600;cursor:pointer;font-size:0.9rem;display:none" onmousedown="forceGrantPermissions()" title="For development/testing only">🔧 Force Grant (Dev)</button>
+<button id="denyBtn" style="flex:1;min-width:80px;padding:12px;border:none;border-radius:8px;background:#374151;color:#e0e0e0;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="denyPermissions()">Deny</button>
 </div>
 </div>
 </div>
@@ -214,16 +226,29 @@ setCookie('reva_permissions_granted','true',365);
 log('✅ All capabilities verified! Permissions granted.','info');
 permissionsGranted=true;
 document.getElementById('permModal').style.display='none';
+document.getElementById('capStatus').style.display='none';
 updatePermDisplay();
 }else{
-log('❌ System missing capabilities: '+data.missing.join(', '),'error');
-document.getElementById('grantBtn').textContent='⚠️ Cannot Grant - Missing: '+data.missing.join(', ');
-setTimeout(()=>{document.getElementById('grantBtn').textContent='✓ Grant Permissions';document.getElementById('grantBtn').disabled=false},5000);
+log('⚠️ System missing capabilities: '+data.missing.join(', '),'error');
+document.getElementById('grantBtn').textContent='✓ Grant Permissions';
+document.getElementById('grantBtn').disabled=false;
+document.getElementById('capStatus').style.display='block';
+document.getElementById('missingList').innerHTML=data.missing.map(m=>`<div>✗ ${m}</div>`).join('');
+document.getElementById('forceBtn').style.display='flex';
 }
 }catch(e){
 log('❌ Error verifying capabilities: '+e.message,'error');
 document.getElementById('grantBtn').textContent='✓ Grant Permissions';
 document.getElementById('grantBtn').disabled=false;
+}
+}
+function forceGrantPermissions(){
+if(confirm('⚠️ Force grant will skip verification.\n\nCommands may fail if capabilities are truly missing.\n\nContinue?')){
+setCookie('reva_permissions_granted','true',365);
+log('🔧 Permissions force granted (development mode)','info');
+permissionsGranted=true;
+document.getElementById('permModal').style.display='none';
+updatePermDisplay();
 }
 }
 function denyPermissions(){
