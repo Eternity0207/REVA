@@ -144,6 +144,24 @@ button{padding:14px 24px;border:none;border-radius:8px;font-size:1rem;cursor:poi
 <body><div class="container">
 <h1>REVA</h1>
 <p class="subtitle">AI OS Controlling Agent</p>
+<div id="permModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:1000;display:flex;align-items:center;justify-content:center">
+<div style="background:#111;border-radius:12px;padding:32px;max-width:500px;text-align:center;border:2px solid #60A5FA">
+<h2 style="margin-bottom:16px;color:#60A5FA">⚠️ Permissions Required</h2>
+<p style="margin-bottom:24px;color:#9CA3AF">Grant permissions to execute commands on the VM?</p>
+<div style="text-align:left;background:#1a1a2e;border-radius:8px;padding:16px;margin-bottom:24px">
+<div style="color:#9CA3AF;font-size:0.9rem;line-height:1.6">
+✓ Execute keyboard commands<br>
+✓ Execute mouse movements & clicks<br>
+✓ Capture screenshots<br>
+✓ Control the VM remotely
+</div>
+</div>
+<div style="display:flex;gap:12px;margin-top:24px">
+<button id="grantBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#8B5CF6);color:white;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="grantPermissions()">✓ Grant Permissions</button>
+<button id="denyBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:#374151;color:#e0e0e0;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="denyPermissions()">Deny</button>
+</div>
+</div>
+</div>
 <div class="card">
 <div class="card-title">Permissions</div>
 <div id="perms"></div>
@@ -164,30 +182,115 @@ button{padding:14px 24px;border:none;border-radius:8px;font-size:1rem;cursor:poi
 </div>
 </div>
 <script>
+let permissionsGranted = false;
 function log(msg,type='info'){document.getElementById('log').innerHTML+=`<div style="color:${type=='error'?'#F87171':'#60A5FA'}">[${new Date().toLocaleTimeString()}] ${msg}</div>`}
-async function checkPerms(){
-const r=await fetch('/api/permissions');const d=await r.json();
-let h='';for(let k in d.permissions){h+=`<span class="status ${d.permissions[k]?'ok':'err'}"></span>${k} `}
-h+=`<br><span class="status ${d.api_key_set?'ok':'err'}"></span>API Key`;
+function setCookie(name,value,days=365){
+const d=new Date();d.setTime(d.getTime()+(days*24*60*60*1000));
+const expires="expires="+d.toUTCString();
+document.cookie=name+"="+value+";"+expires+";path=/";
+}
+function getCookie(name){
+const nameEQ=name+"=";
+const ca=document.cookie.split(';');
+for(let i=0;i<ca.length;i++){
+let c=ca[i].trim();
+if(c.indexOf(nameEQ)==0)return c.substring(nameEQ.length);
+}
+return null;
+}
+function checkUserPerms(){
+const granted=getCookie('reva_permissions_granted');
+return granted==='true';
+}
+async function grantPermissions(){
+document.getElementById('grantBtn').disabled=true;
+document.getElementById('grantBtn').textContent='⏳ Verifying...';
+log('⏳ Verifying system capabilities...');
+try{
+const r=await fetch('/api/verify-capabilities');
+const data=await r.json();
+if(data.all_available){
+setCookie('reva_permissions_granted','true',365);
+log('✅ All capabilities verified! Permissions granted.','info');
+permissionsGranted=true;
+document.getElementById('permModal').style.display='none';
+updatePermDisplay();
+}else{
+log('❌ System missing capabilities: '+data.missing.join(', '),'error');
+document.getElementById('grantBtn').textContent='⚠️ Cannot Grant - Missing: '+data.missing.join(', ');
+setTimeout(()=>{document.getElementById('grantBtn').textContent='✓ Grant Permissions';document.getElementById('grantBtn').disabled=false},5000);
+}
+}catch(e){
+log('❌ Error verifying capabilities: '+e.message,'error');
+document.getElementById('grantBtn').textContent='✓ Grant Permissions';
+document.getElementById('grantBtn').disabled=false;
+}
+}
+function denyPermissions(){
+log('❌ Permissions denied. You cannot execute commands.','error');
+document.getElementById('permModal').style.display='none';
+}
+function showPermModal(){
+document.getElementById('permModal').style.display='flex';
+}
+function closePermModal(){
+document.getElementById('permModal').style.display='none';
+}
+async function updatePermDisplay(){
+const status=checkUserPerms();
+let h=`<span class="status ${status?'ok':'err'}"></span>${status?'✓ Granted':'✗ Not Granted'}`;
 document.getElementById('perms').innerHTML=h;
 }
 async function saveKey(){
 const k=document.getElementById('key').value;
 if(!k.startsWith('gsk_')){log('Invalid key format','error');return}
 const r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:k})});
-if(r.ok){log('Key saved');checkPerms()}else{log('Save failed','error')}
+if(r.ok){log('🔑 API Key saved successfully');updatePermDisplay()}else{log('Save failed','error')}
 }
 async function execute(){
-const c=document.getElementById('cmd').value;if(!c){log('Enter command','error');return}
-log('Executing: '+c);
+const c=document.getElementById('cmd').value;
+if(!c){log('Enter command','error');return}
+if(!permissionsGranted){
+log('❌ Permissions not granted. Please grant permissions first.','error');
+showPermModal();
+return;
+}
+log('⚙️ Executing: '+c);
 try{
 const r=await fetch('/api/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:c})});
 const d=await r.json();
-if(r.ok){log('Success: '+JSON.stringify(d.actions))}else{log(d.detail,'error')}
-}catch(e){log(e.message,'error')}
+if(r.ok){log('✓ Success: '+JSON.stringify(d.actions))}else{log('Error: '+d.detail,'error')}
+}catch(e){log('Error: '+e.message,'error')}
 }
 document.getElementById('cmd').addEventListener('keypress',e=>{if(e.key=='Enter')execute()});
-checkPerms();
+async function initApp(){
+log('🔍 Checking system capabilities...');
+try{
+const r=await fetch('/api/verify-capabilities');
+const data=await r.json();
+const userGranted=checkUserPerms();
+if(userGranted){
+if(data.all_available){
+log('✅ Permissions granted & all capabilities available.','info');
+permissionsGranted=true;
+document.getElementById('permModal').style.display='none';
+}else{
+log('⚠️ Permissions granted but system missing: '+data.missing.join(', '),'error');
+log('⚠️ Some commands may fail.','error');
+permissionsGranted=false;
+document.getElementById('permModal').style.display='flex';
+}
+}else{
+log('⚠️ Permissions not granted. Click the modal button to grant access.');
+log('📋 System capabilities: '+Object.entries(data.permissions).map(([k,v])=>`${k}=${v?'✓':'✗'}`).join(', '));
+showPermModal();
+}
+updatePermDisplay();
+}catch(e){
+log('❌ Error checking capabilities: '+e.message,'error');
+}
+}
+initApp();
 </script></body></html>"""
 
 @app.get("/api/health")
@@ -197,6 +300,18 @@ async def health():
 @app.get("/api/permissions")
 async def permissions():
     return {"permissions": check_permissions(), "api_key_set": bool(os.getenv("OPENAI_API_KEY"))}
+
+@app.get("/api/verify-capabilities")
+async def verify_capabilities():
+    perms = check_permissions()
+    all_ok = perms.get("screenshot") and perms.get("keyboard") and perms.get("mouse")
+    missing = [k for k, v in perms.items() if not v]
+    return {
+        "all_available": all_ok,
+        "permissions": perms,
+        "missing": missing,
+        "message": "All capabilities available" if all_ok else f"Missing: {', '.join(missing)}"
+    }
 
 @app.post("/api/key")
 async def save_key(request: APIKeyRequest):
