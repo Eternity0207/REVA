@@ -5,11 +5,13 @@ import subprocess
 import base64
 import json
 import re
+import markdown
 from datetime import datetime
 from io import BytesIO
 from PIL import Image
-from fastapi import FastAPI, HTTPException, Header
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -198,198 +200,254 @@ def execute_action(action):
     return {"success": False, "error": f"Unknown action: {op}"}
 
 @app.get("/", response_class=HTMLResponse)
-async def root():
-    return """<!DOCTYPE html>
-<html><head><title>REVA</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui;background:linear-gradient(135deg,#1a1a2e,#16213e);min-height:100vh;color:#e0e0e0}
-.container{max-width:800px;margin:0 auto;padding:40px 20px}
-h1{font-size:3rem;background:linear-gradient(135deg,#60A5FA,#A78BFA);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;margin-bottom:10px}
-.subtitle{text-align:center;color:#9CA3AF;margin-bottom:30px}
-.card{background:rgba(17,24,39,0.8);border-radius:16px;padding:24px;margin-bottom:20px}
-.card-title{font-size:1.2rem;color:#60A5FA;margin-bottom:16px}
-input{width:100%;padding:14px;border:none;border-radius:8px;background:#1F2937;color:#e0e0e0;font-size:1rem;margin-bottom:12px}
-button{padding:14px 24px;border:none;border-radius:8px;font-size:1rem;cursor:pointer;width:100%;margin-bottom:8px}
-.btn-primary{background:linear-gradient(135deg,#3B82F6,#8B5CF6);color:white;font-weight:600}
-.btn-secondary{background:#374151;color:#e0e0e0}
-.log{background:#000;border-radius:8px;padding:16px;max-height:200px;overflow-y:auto;font-family:monospace;font-size:0.9rem}
-.status{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px}
-.status.ok{background:#10B981}
-.status.err{background:#EF4444}
-</style></head>
-<body><div class="container">
-<h1>REVA</h1>
-<p class="subtitle">AI OS Controlling Agent</p>
-<div id="permModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:1000;display:flex;align-items:center;justify-content:center">
-<div style="background:#111;border-radius:12px;padding:32px;max-width:500px;text-align:center;border:2px solid #60A5FA">
-<h2 style="margin-bottom:16px;color:#60A5FA">🔐 Permission Request</h2>
-<p style="margin-bottom:24px;color:#9CA3AF">This website needs permission to control your browser and access system capabilities.</p>
-<div style="text-align:left;background:#1a1a2e;border-radius:8px;padding:16px;margin-bottom:24px">
-<div style="color:#9CA3AF;font-size:0.9rem;line-height:1.6">
-📋 <strong>This app will be able to:</strong><br>
-• Send commands to the remote VM<br>
-• Display permission in your browser<br>
-• Store your preference (365 days)<br><br>
-<span style="color:#60A5FA">Note: You may see additional browser permission dialogs</span>
-</div>
-</div>
-<div style="display:flex;gap:12px;margin-top:24px;flex-wrap:wrap">
-<button id="grantBtn" style="flex:1;min-width:140px;padding:14px;border:none;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#8B5CF6);color:white;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="requestBrowserPermission()">✓ Grant Permission</button>
-<button id="denyBtn" style="flex:1;min-width:100px;padding:14px;border:none;border-radius:8px;background:#374151;color:#e0e0e0;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="denyPermissions()">✗ Deny</button>
-</div>
-<p style="margin-top:16px;color:#6B7280;font-size:0.85rem">Your choice will be saved. You can change it in browser settings later.</p>
-</div>
-</div>
-<div class="card">
-<div class="card-title">Permissions</div>
-<div id="perms"></div>
-</div>
-<div class="card">
-<div class="card-title">API Key</div>
-<input type="password" id="key" placeholder="gsk_...">
-<button class="btn-primary" onclick="saveKey()">Save Key</button>
-</div>
-<div class="card">
-<div class="card-title">Command</div>
-<input type="text" id="cmd" placeholder="Enter command...">
-<button class="btn-primary" onclick="execute()">Execute</button>
-</div>
-<div class="card">
-<div class="card-title">Log</div>
-<div class="log" id="log">Ready.</div>
-</div>
-</div>
-<script>
-let permissionsGranted = false;
-function log(msg,type='info'){document.getElementById('log').innerHTML+=`<div style="color:${type=='error'?'#F87171':'#60A5FA'}">[${new Date().toLocaleTimeString()}] ${msg}</div>`}
-function setCookie(name,value,days=365){
-const d=new Date();d.setTime(d.getTime()+(days*24*60*60*1000));
-const expires="expires="+d.toUTCString();
-document.cookie=name+"="+value+";"+expires+";path=/";
-}
-function getCookie(name){
-const nameEQ=name+"=";
-const ca=document.cookie.split(';');
-for(let i=0;i<ca.length;i++){
-let c=ca[i].trim();
-if(c.indexOf(nameEQ)==0)return c.substring(nameEQ.length);
-}
-return null;
-}
-function checkUserPerms(){
-const granted=getCookie('reva_user_permissions_granted');
-return granted==='true';
-}
-async function requestBrowserPermission(){
-document.getElementById('grantBtn').disabled=true;
-document.getElementById('grantBtn').textContent='⏳ Requesting...';
-log('⏳ Requesting browser permission...');
-try{
-const perms=['microphone','camera'].filter(p=>{
-try{
-return navigator.permissions.query({name:p});
-}catch(e){
-return false;
-}
-});
-if(navigator.permissions){
-Promise.all(perms.map(p=>navigator.permissions.query({name:p}))).then(results=>{
-setCookie('reva_user_permissions_granted','true',365);
-log('✅ Browser permission granted!','info');
-permissionsGranted=true;
-document.getElementById('permModal').style.display='none';
-document.getElementById('grantBtn').textContent='✓ Grant Permission';
-document.getElementById('grantBtn').disabled=false;
-updatePermDisplay();
-}).catch(e=>{
-setCookie('reva_user_permissions_granted','true',365);
-log('✅ Permission confirmed!','info');
-permissionsGranted=true;
-document.getElementById('permModal').style.display='none';
-document.getElementById('grantBtn').textContent='✓ Grant Permission';
-document.getElementById('grantBtn').disabled=false;
-updatePermDisplay();
-});
-}else{
-setCookie('reva_user_permissions_granted','true',365);
-log('✅ Permission granted!','info');
-permissionsGranted=true;
-document.getElementById('permModal').style.display='none';
-document.getElementById('grantBtn').textContent='✓ Grant Permission';
-document.getElementById('grantBtn').disabled=false;
-updatePermDisplay();
-}
-}catch(e){
-setCookie('reva_user_permissions_granted','true',365);
-log('✅ Permission granted!','info');
-permissionsGranted=true;
-document.getElementById('permModal').style.display='none';
-document.getElementById('grantBtn').textContent='✓ Grant Permission';
-document.getElementById('grantBtn').disabled=false;
-updatePermDisplay();
-}
-}
-function denyPermissions(){
-log('❌ Permission denied. You cannot use this app.','error');
-document.getElementById('permModal').style.display='none';
-}
-function showPermModal(){
-document.getElementById('permModal').style.display='flex';
-}
-function closePermModal(){
-document.getElementById('permModal').style.display='none';
-}
-async function updatePermDisplay(){
-const status=checkUserPerms();
-let h=`<span class="status ${status?'ok':'err'}"></span>${status?'✓ Granted':'✗ Not Granted'}`;
-document.getElementById('perms').innerHTML=h;
-}
-async function saveKey(){
-const k=document.getElementById('key').value;
-if(!k.startsWith('gsk_')){log('Invalid key format','error');return}
-const r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:k})});
-if(r.ok){log('🔑 API Key saved successfully');updatePermDisplay()}else{log('Save failed','error')}
-}
-async function execute(){
-const c=document.getElementById('cmd').value;
-if(!c){log('Enter command','error');return}
+async def root(request: Request):
+    """Serve homepage - detect server URL and show proper UI"""
+    # Detect server URL from request
+    scheme = request.url.scheme
+    netloc = request.url.netloc
+    server_url = f"{scheme}://{netloc}"
+    
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REVA - Remote Execution and Visualization Agent</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
 
-// Check browser permission first
-if(!permissionsGranted){
-log('❌ Browser permission required. Please grant permission first.','error');
-showPermModal();
-return;
-}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }}
 
-log('⚙️ Executing: '+c);
-try{
-const r=await fetch('/api/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:c})});
-const d=await r.json();
-if(r.ok){log('✓ Success: '+JSON.stringify(d.actions))}else{
-if(d.detail && d.detail.includes('Permissions not granted')){
-log('❌ VM missing system capabilities. Admin needs to install tools.','error');
-}else{
-log('Error: '+d.detail,'error');
-}
-}
-}catch(e){log('Error: '+e.message,'error')}
-}
-document.getElementById('cmd').addEventListener('keypress',e=>{if(e.key=='Enter')execute()});
-async function initApp(){
-permissionsGranted=checkUserPerms();
-updatePermDisplay();
+        .container {{
+            max-width: 1200px;
+            width: 90%;
+        }}
 
-if(!permissionsGranted){
-log('⚠️ Browser permission required to use this app.');
-showPermModal();
-}else{
-log('✅ Browser permission granted. Ready to execute commands.');
-log('📋 VM will handle system capabilities. Commands sent to: '+window.location.origin);
-}
-}
-initApp();
-</script></body></html>"""
+        .hero {{
+            text-align: center;
+            color: white;
+            margin-bottom: 50px;
+        }}
+
+        .hero h1 {{
+            font-size: 3.5em;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }}
+
+        .hero p {{
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            opacity: 0.95;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }}
+
+        .hero .subtitle {{
+            font-size: 1.1em;
+            opacity: 0.9;
+        }}
+
+        .cards {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+        }}
+
+        .card {{
+            background: white;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }}
+
+        .card:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }}
+
+        .card h3 {{
+            color: #667eea;
+            margin-bottom: 16px;
+            font-size: 1.3em;
+        }}
+
+        .card p {{
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }}
+
+        .credentials {{
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            margin-bottom: 12px;
+        }}
+
+        .copy-btn {{
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s ease;
+        }}
+
+        .copy-btn:hover {{
+            background: #764ba2;
+        }}
+
+        .button {{
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 14px 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: none;
+            cursor: pointer;
+            margin: 8px;
+        }}
+
+        .button:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }}
+
+        .full-width {{
+            width: 100%;
+            margin: 0;
+        }}
+
+        .doc-links {{
+            text-align: center;
+            margin-top: 30px;
+        }}
+
+        .doc-link {{
+            color: white;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            transition: border-color 0.3s ease;
+        }}
+
+        .doc-link:hover {{
+            border-bottom-color: white;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>🤖 REVA</h1>
+            <p>Remote Execution & Visualization Agent</p>
+            <p class="subtitle">Control your OS with AI | Distributed Agent System</p>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <h3>📥 Download App</h3>
+                <p>Get the standalone REVA desktop application that connects to this server.</p>
+                <button class="button full-width" onclick="downloadApp()">
+                    ⬇️ Download REVA App
+                </button>
+                <p style="color: #999; font-size: 0.9em; margin-top: 10px;">
+                    Works on Windows, macOS, and Linux
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>🔑 Agent Credentials</h3>
+                <p>Use these credentials in the REVA app to connect:</p>
+                <div class="credentials">
+                    Server: <span id="server-url">{server_url}</span>
+                    <button class="copy-btn" onclick="copy('server-url')">Copy</button>
+                </div>
+                <div class="credentials">
+                    ID: <span id="agent-id">my-agent</span>
+                    <button class="copy-btn" onclick="copy('agent-id')">Copy</button>
+                </div>
+                <div class="credentials">
+                    Token: <span id="agent-token">my-secret-token</span>
+                    <button class="copy-btn" onclick="copy('agent-token')">Copy</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📚 Documentation</h3>
+                <p>Learn how to use REVA and set up your agent.</p>
+                <button class="button full-width" onclick="location.href='/guide'" style="background: #667eea;">
+                    📖 Setup Guide
+                </button>
+                <button class="button full-width" onclick="location.href='/documentation'" style="background: #764ba2; margin-top: 8px;">
+                    📋 Full Documentation
+                </button>
+            </div>
+        </div>
+
+        <div style="text-align: center; color: white; margin-top: 40px;">
+            <p>🟢 <strong>Server Status:</strong> Ready | <strong>Agent System:</strong> Active</p>
+            <p style="font-size: 0.9em; opacity: 0.8; margin-top: 10px;">
+                Version 3.0 | Built for distributed OS automation
+            </p>
+        </div>
+    </div>
+
+    <script>
+        function copy(elementId) {{
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text).then(() => {{
+                alert('Copied to clipboard!');
+            }}).catch(() => {{
+                prompt('Copy this:', text);
+            }});
+        }}
+
+        function downloadApp() {{
+            const fileUrl = '/dist/REVA';
+            const xhr = new XMLHttpRequest();
+            xhr.open('HEAD', fileUrl, true);
+            xhr.onload = function() {{
+                if (xhr.status === 200) {{
+                    window.location.href = fileUrl;
+                }} else {{
+                    alert('App not available yet. Please try again later.');
+                }}
+            }};
+            xhr.onerror = function() {{
+                alert('Error checking app availability');
+            }};
+            xhr.send();
+        }}
+    </script>
+</body>
+</html>"""
+    return html
+
 
 # ====================== AGENT ENDPOINTS ======================
 
@@ -610,6 +668,7 @@ Objective: {request.command}"""
             if action.get("operation") == "done":
                 break
 
+
         return {"success": True, "command": request.command, "actions": results}
 
     except json.JSONDecodeError as e:
@@ -619,6 +678,135 @@ Objective: {request.command}"""
         error_msg = str(e)
         logger.error(f"Execute error: {error_msg}")
         raise HTTPException(500, error_msg)
+
+
+# ====================== DOCUMENTATION ENDPOINTS ======================
+
+@app.get("/guide", response_class=HTMLResponse)
+async def guide():
+    """Render GUIDE.md as styled HTML"""
+    try:
+        with open("GUIDE.md", "r") as f:
+            content = f.read()
+        html_content = markdown.markdown(content, extensions=['extra', 'codehilite'])
+    except FileNotFoundError:
+        html_content = "<p>Guide not found</p>"
+    
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REVA Setup Guide</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 40px 20px; color: #333; }}
+        .container {{ max-width: 900px; margin: 0 auto; background: white; border-radius: 12px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }}
+        h1 {{ color: #667eea; margin-bottom: 30px; border-bottom: 3px solid #667eea; padding-bottom: 15px; }}
+        h2 {{ color: #764ba2; margin-top: 30px; margin-bottom: 15px; }}
+        h3 {{ color: #667eea; margin-top: 20px; margin-bottom: 10px; }}
+        code {{ background: #f0f4ff; padding: 2px 6px; border-radius: 4px; font-family: 'Monaco', 'Courier New', monospace; }}
+        pre {{ background: #1a1a2e; color: #e0e0e0; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 15px 0; }}
+        pre code {{ background: none; padding: 0; color: #e0e0e0; }}
+        blockquote {{ border-left: 4px solid #667eea; padding-left: 16px; margin: 20px 0; color: #666; }}
+        a {{ color: #667eea; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
+        .back-link {{ display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: #667eea; color: white; border-radius: 6px; }}
+        .back-link:hover {{ background: #764ba2; }}
+        li {{ margin-left: 20px; margin-bottom: 8px; line-height: 1.6; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+        th {{ background: #f0f4ff; color: #667eea; font-weight: 600; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Home</a>
+        {html_content}
+        <a href="/" class="back-link" style="margin-top: 30px;">← Back to Home</a>
+    </div>
+</body>
+</html>"""
+
+
+@app.get("/documentation", response_class=HTMLResponse)
+async def documentation():
+    """Render README.md as styled HTML"""
+    try:
+        with open("README.md", "r") as f:
+            content = f.read()
+        html_content = markdown.markdown(content, extensions=['extra', 'codehilite'])
+    except FileNotFoundError:
+        html_content = "<p>Documentation not found</p>"
+    
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REVA Documentation</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 40px 20px; color: #333; }}
+        .container {{ max-width: 900px; margin: 0 auto; background: white; border-radius: 12px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }}
+        h1 {{ color: #667eea; margin-bottom: 30px; border-bottom: 3px solid #667eea; padding-bottom: 15px; }}
+        h2 {{ color: #764ba2; margin-top: 30px; margin-bottom: 15px; }}
+        h3 {{ color: #667eea; margin-top: 20px; margin-bottom: 10px; }}
+        code {{ background: #f0f4ff; padding: 2px 6px; border-radius: 4px; font-family: 'Monaco', 'Courier New', monospace; }}
+        pre {{ background: #1a1a2e; color: #e0e0e0; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 15px 0; }}
+        pre code {{ background: none; padding: 0; color: #e0e0e0; }}
+        blockquote {{ border-left: 4px solid #667eea; padding-left: 16px; margin: 20px 0; color: #666; }}
+        a {{ color: #667eea; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
+        .back-link {{ display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: #667eea; color: white; border-radius: 6px; }}
+        .back-link:hover {{ background: #764ba2; }}
+        li {{ margin-left: 20px; margin-bottom: 8px; line-height: 1.6; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+        th {{ background: #f0f4ff; color: #667eea; font-weight: 600; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Home</a>
+        {html_content}
+        <a href="/" class="back-link" style="margin-top: 30px;">← Back to Home</a>
+    </div>
+</body>
+</html>"""
+
+
+# ====================== STATIC FILES & APP DOWNLOAD ======================
+
+@app.get("/dist/REVA")
+async def download_app():
+    """Download the REVA desktop application"""
+    app_path = "dist/REVA"
+    
+    # Check different possible binary names
+    possible_paths = [
+        "dist/REVA",
+        "dist/REVA.exe",
+        "dist/REVA.app/Contents/MacOS/REVA"
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return FileResponse(
+                path=path,
+                filename="REVA",
+                media_type="application/octet-stream"
+            )
+    
+    raise HTTPException(404, "REVA app not found. Please build with python build_app.py")
+
+
+# Mount static files (if dist folder exists)
+if os.path.exists("dist"):
+    try:
+        app.mount("/static", StaticFiles(directory="dist"), name="static")
+    except Exception:
+        pass  # Silently fail if mount fails
 
 if __name__ == "__main__":
     import uvicorn
