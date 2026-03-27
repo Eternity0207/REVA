@@ -778,35 +778,12 @@ async def documentation():
 
 # ====================== STATIC FILES & APP DOWNLOAD ======================
 
-@app.get("/dist/REVA")
-async def download_app():
-    """Download the REVA desktop application"""
-    app_path = "dist/REVA"
-    
-    # Check different possible binary names
-    possible_paths = [
-        "dist/REVA",
-        "dist/REVA.exe",
-        "dist/REVA.app/Contents/MacOS/REVA"
-    ]
-    
-    for path in possible_paths:
-        if os.path.exists(path):
-            return FileResponse(
-                path=path,
-                filename="REVA",
-                media_type="application/octet-stream"
-            )
-    
-    raise HTTPException(404, "REVA app not found. Please build with python build_app.py")
-
-
-# Mount static files (if dist folder exists)
+# Mount static files directory directly at /dist
 if os.path.exists("dist"):
     try:
-        app.mount("/static", StaticFiles(directory="dist"), name="static")
-    except Exception:
-        pass  # Silently fail if mount fails
+        app.mount("/dist", StaticFiles(directory="dist"), name="dist")
+    except Exception as e:
+        logger.error(f"Failed to mount /dist: {e}")
 
 if __name__ == "__main__":
     import uvicorn
