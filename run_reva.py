@@ -7,7 +7,6 @@ import os
 import sys
 import time
 import socket
-import subprocess
 from pathlib import Path
 
 os.chdir(Path(__file__).parent)
@@ -25,15 +24,12 @@ def main():
     print("║" + "Single Port Architecture (Everything on :8002)".center(78) + "║")
     print("╚" + "="*78 + "╝\n")
     
-    # Kill any existing processes
-    os.system("pkill -f 'python3.*main_server' 2>/dev/null || true")
-    time.sleep(1)
-    
+    # ❌ REMOVED: pkill (was killing systemd process)
+    # ❌ REMOVED: lsof kill (was killing own server)
+
     print("⚡ Checking ports...")
     if is_port_open(8002):
-        print("   ⚠️  Port 8002 in use... cleaning up")
-        os.system("lsof -i :8002 2>/dev/null | grep LISTEN | awk '{print $2}' | xargs kill -9 2>/dev/null || true")
-        time.sleep(1)
+        print("   ⚠️  Port 8002 already in use (expected under systemd)")
     
     print("\n✅ Starting REVA System...\n")
     
@@ -52,7 +48,7 @@ def main():
     print("Press CTRL+C to stop REVA\n")
     
     try:
-        uvicorn.run(app, host="0.0.0.0", port=8002, log_level="critical")
+        uvicorn.run(app, host="0.0.0.0", port=8002, log_level="info")
     except KeyboardInterrupt:
         print("\n" + "="*80)
         print("✅ REVA Stopped")
@@ -61,4 +57,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
