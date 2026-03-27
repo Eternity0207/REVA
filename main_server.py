@@ -7,17 +7,14 @@ import json
 import re
 from datetime import datetime
 from io import BytesIO
-from typing import Optional
 from PIL import Image
-from fastapi import FastAPI, HTTPException, Header, Request
-from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException, Header
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from loguru import logger
 from openai import OpenAI
-import markdown
 
 # Import REVA core modules
 from core import TaskManager, Command, CommandType, Agent
@@ -34,10 +31,6 @@ auth = AuthMiddleware(task_manager)
 
 app = FastAPI(title="REVA", version="3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# Serve static files if they exist
-if os.path.exists("dist"):
-    app.mount("/dist", StaticFiles(directory="dist"), name="dist")
 
 class CommandRequest(BaseModel):
     command: str
@@ -60,7 +53,7 @@ class SubmitResultRequest(BaseModel):
     token: str
     task_id: str
     result: dict
-    error: Optional[str] = None
+    error: str = None
 
 class HeartbeatRequest(BaseModel):
     agent_id: str
@@ -206,481 +199,197 @@ def execute_action(action):
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serve the main landing page"""
-    if os.path.exists("index.html"):
-        with open("index.html", "r") as f:
-            return f.read()
-    # Fallback if index.html doesn't exist
-    return HTMLResponse(content="<h1>REVA - Remote Execution Agent</h1><p>index.html not found</p>", status_code=200)
+    return """<!DOCTYPE html>
+<html><head><title>REVA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui;background:linear-gradient(135deg,#1a1a2e,#16213e);min-height:100vh;color:#e0e0e0}
+.container{max-width:800px;margin:0 auto;padding:40px 20px}
+h1{font-size:3rem;background:linear-gradient(135deg,#60A5FA,#A78BFA);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;margin-bottom:10px}
+.subtitle{text-align:center;color:#9CA3AF;margin-bottom:30px}
+.card{background:rgba(17,24,39,0.8);border-radius:16px;padding:24px;margin-bottom:20px}
+.card-title{font-size:1.2rem;color:#60A5FA;margin-bottom:16px}
+input{width:100%;padding:14px;border:none;border-radius:8px;background:#1F2937;color:#e0e0e0;font-size:1rem;margin-bottom:12px}
+button{padding:14px 24px;border:none;border-radius:8px;font-size:1rem;cursor:pointer;width:100%;margin-bottom:8px}
+.btn-primary{background:linear-gradient(135deg,#3B82F6,#8B5CF6);color:white;font-weight:600}
+.btn-secondary{background:#374151;color:#e0e0e0}
+.log{background:#000;border-radius:8px;padding:16px;max-height:200px;overflow-y:auto;font-family:monospace;font-size:0.9rem}
+.status{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px}
+.status.ok{background:#10B981}
+.status.err{background:#EF4444}
+</style></head>
+<body><div class="container">
+<h1>REVA</h1>
+<p class="subtitle">AI OS Controlling Agent</p>
+<div id="permModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:1000;display:flex;align-items:center;justify-content:center">
+<div style="background:#111;border-radius:12px;padding:32px;max-width:500px;text-align:center;border:2px solid #60A5FA">
+<h2 style="margin-bottom:16px;color:#60A5FA">🔐 Permission Request</h2>
+<p style="margin-bottom:24px;color:#9CA3AF">This website needs permission to control your browser and access system capabilities.</p>
+<div style="text-align:left;background:#1a1a2e;border-radius:8px;padding:16px;margin-bottom:24px">
+<div style="color:#9CA3AF;font-size:0.9rem;line-height:1.6">
+📋 <strong>This app will be able to:</strong><br>
+• Send commands to the remote VM<br>
+• Display permission in your browser<br>
+• Store your preference (365 days)<br><br>
+<span style="color:#60A5FA">Note: You may see additional browser permission dialogs</span>
+</div>
+</div>
+<div style="display:flex;gap:12px;margin-top:24px;flex-wrap:wrap">
+<button id="grantBtn" style="flex:1;min-width:140px;padding:14px;border:none;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#8B5CF6);color:white;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="requestBrowserPermission()">✓ Grant Permission</button>
+<button id="denyBtn" style="flex:1;min-width:100px;padding:14px;border:none;border-radius:8px;background:#374151;color:#e0e0e0;font-weight:600;cursor:pointer;font-size:1rem" onmousedown="denyPermissions()">✗ Deny</button>
+</div>
+<p style="margin-top:16px;color:#6B7280;font-size:0.85rem">Your choice will be saved. You can change it in browser settings later.</p>
+</div>
+</div>
+<div class="card">
+<div class="card-title">Permissions</div>
+<div id="perms"></div>
+</div>
+<div class="card">
+<div class="card-title">API Key</div>
+<input type="password" id="key" placeholder="gsk_...">
+<button class="btn-primary" onclick="saveKey()">Save Key</button>
+</div>
+<div class="card">
+<div class="card-title">Command</div>
+<input type="text" id="cmd" placeholder="Enter command...">
+<button class="btn-primary" onclick="execute()">Execute</button>
+</div>
+<div class="card">
+<div class="card-title">Log</div>
+<div class="log" id="log">Ready.</div>
+</div>
+</div>
+<script>
+let permissionsGranted = false;
+function log(msg,type='info'){document.getElementById('log').innerHTML+=`<div style="color:${type=='error'?'#F87171':'#60A5FA'}">[${new Date().toLocaleTimeString()}] ${msg}</div>`}
+function setCookie(name,value,days=365){
+const d=new Date();d.setTime(d.getTime()+(days*24*60*60*1000));
+const expires="expires="+d.toUTCString();
+document.cookie=name+"="+value+";"+expires+";path=/";
+}
+function getCookie(name){
+const nameEQ=name+"=";
+const ca=document.cookie.split(';');
+for(let i=0;i<ca.length;i++){
+let c=ca[i].trim();
+if(c.indexOf(nameEQ)==0)return c.substring(nameEQ.length);
+}
+return null;
+}
+function checkUserPerms(){
+const granted=getCookie('reva_user_permissions_granted');
+return granted==='true';
+}
+async function requestBrowserPermission(){
+document.getElementById('grantBtn').disabled=true;
+document.getElementById('grantBtn').textContent='⏳ Requesting...';
+log('⏳ Requesting browser permission...');
+try{
+const perms=['microphone','camera'].filter(p=>{
+try{
+return navigator.permissions.query({name:p});
+}catch(e){
+return false;
+}
+});
+if(navigator.permissions){
+Promise.all(perms.map(p=>navigator.permissions.query({name:p}))).then(results=>{
+setCookie('reva_user_permissions_granted','true',365);
+log('✅ Browser permission granted!','info');
+permissionsGranted=true;
+document.getElementById('permModal').style.display='none';
+document.getElementById('grantBtn').textContent='✓ Grant Permission';
+document.getElementById('grantBtn').disabled=false;
+updatePermDisplay();
+}).catch(e=>{
+setCookie('reva_user_permissions_granted','true',365);
+log('✅ Permission confirmed!','info');
+permissionsGranted=true;
+document.getElementById('permModal').style.display='none';
+document.getElementById('grantBtn').textContent='✓ Grant Permission';
+document.getElementById('grantBtn').disabled=false;
+updatePermDisplay();
+});
+}else{
+setCookie('reva_user_permissions_granted','true',365);
+log('✅ Permission granted!','info');
+permissionsGranted=true;
+document.getElementById('permModal').style.display='none';
+document.getElementById('grantBtn').textContent='✓ Grant Permission';
+document.getElementById('grantBtn').disabled=false;
+updatePermDisplay();
+}
+}catch(e){
+setCookie('reva_user_permissions_granted','true',365);
+log('✅ Permission granted!','info');
+permissionsGranted=true;
+document.getElementById('permModal').style.display='none';
+document.getElementById('grantBtn').textContent='✓ Grant Permission';
+document.getElementById('grantBtn').disabled=false;
+updatePermDisplay();
+}
+}
+function denyPermissions(){
+log('❌ Permission denied. You cannot use this app.','error');
+document.getElementById('permModal').style.display='none';
+}
+function showPermModal(){
+document.getElementById('permModal').style.display='flex';
+}
+function closePermModal(){
+document.getElementById('permModal').style.display='none';
+}
+async function updatePermDisplay(){
+const status=checkUserPerms();
+let h=`<span class="status ${status?'ok':'err'}"></span>${status?'✓ Granted':'✗ Not Granted'}`;
+document.getElementById('perms').innerHTML=h;
+}
+async function saveKey(){
+const k=document.getElementById('key').value;
+if(!k.startsWith('gsk_')){log('Invalid key format','error');return}
+const r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:k})});
+if(r.ok){log('🔑 API Key saved successfully');updatePermDisplay()}else{log('Save failed','error')}
+}
+async function execute(){
+const c=document.getElementById('cmd').value;
+if(!c){log('Enter command','error');return}
 
+// Check browser permission first
+if(!permissionsGranted){
+log('❌ Browser permission required. Please grant permission first.','error');
+showPermModal();
+return;
+}
 
-@app.get("/docs", response_class=HTMLResponse)
-async def show_documentation(request: Request):
-    """Display full documentation from README.md"""
-    if not os.path.exists("README.md"):
-        return HTMLResponse(content="<h1>Documentation not found</h1>", status_code=404)
-    
-    with open("README.md", "r") as f:
-        md_content = f.read()
-    
-    # Convert markdown to HTML
-    html_content = markdown.markdown(md_content, extensions=['extra', 'codehilite'])
-    
-    # Get the server URL from request
-    server_url = f"{request.url.scheme}://{request.url.netloc}"
-    
-    # Create styled HTML page
-    styled_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>REVA Documentation</title>
-        <style>
-            * {{
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }}
-            
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                padding: 40px 20px;
-                color: #333;
-            }}
-            
-            .container {{
-                max-width: 900px;
-                margin: 0 auto;
-                background: white;
-                border-radius: 12px;
-                padding: 50px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            }}
-            
-            .back-link {{
-                display: inline-block;
-                color: #667eea;
-                text-decoration: none;
-                font-weight: 600;
-                margin-bottom: 30px;
-                transition: all 0.3s;
-            }}
-            
-            .back-link:hover {{
-                color: #764ba2;
-                transform: translateX(-3px);
-            }}
-            
-            h1, h2, h3, h4, h5, h6 {{
-                color: #667eea;
-                margin-top: 30px;
-                margin-bottom: 15px;
-                border-bottom: 2px solid #f0f0f0;
-                padding-bottom: 10px;
-            }}
-            
-            h1 {{
-                font-size: 2.5em;
-                margin-top: 0;
-                border-bottom: 3px solid #667eea;
-            }}
-            
-            h2 {{
-                font-size: 1.8em;
-            }}
-            
-            h3 {{
-                font-size: 1.4em;
-            }}
-            
-            p {{
-                line-height: 1.8;
-                margin-bottom: 15px;
-                color: #555;
-            }}
-            
-            ul, ol {{
-                margin-left: 30px;
-                margin-bottom: 15px;
-            }}
-            
-            li {{
-                margin-bottom: 8px;
-                color: #555;
-                line-height: 1.6;
-            }}
-            
-            code {{
-                background: #f5f5f5;
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-family: 'Courier New', monospace;
-                color: #d32f2f;
-                font-size: 0.9em;
-            }}
-            
-            pre {{
-                background: #1a1a2e;
-                color: #60a5fa;
-                padding: 20px;
-                border-radius: 8px;
-                overflow-x: auto;
-                margin: 20px 0;
-                border-left: 4px solid #667eea;
-                font-size: 0.9em;
-                line-height: 1.5;
-            }}
-            
-            pre code {{
-                background: none;
-                color: inherit;
-                padding: 0;
-                border-radius: 0;
-                font-size: inherit;
-            }}
-            
-            blockquote {{
-                border-left: 4px solid #667eea;
-                padding-left: 20px;
-                margin-left: 0;
-                margin-bottom: 15px;
-                color: #666;
-                font-style: italic;
-            }}
-            
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin: 20px 0;
-            }}
-            
-            th, td {{
-                border: 1px solid #ddd;
-                padding: 12px;
-                text-align: left;
-            }}
-            
-            th {{
-                background: #f0f4ff;
-                color: #667eea;
-                font-weight: 600;
-            }}
-            
-            tr:nth-child(even) {{
-                background: #f9f9f9;
-            }}
-            
-            a {{
-                color: #667eea;
-                text-decoration: none;
-                font-weight: 500;
-                transition: all 0.3s;
-            }}
-            
-            a:hover {{
-                color: #764ba2;
-                text-decoration: underline;
-            }}
-            
-            em, strong {{
-                color: #667eea;
-            }}
-            
-            .toc {{
-                background: #f0f4ff;
-                border: 2px solid #e0e0f5;
-                border-radius: 8px;
-                padding: 20px;
-                margin: 30px 0;
-            }}
-            
-            .toc h3 {{
-                margin-top: 0;
-                color: #667eea;
-            }}
-            
-            .toc ul {{
-                list-style: none;
-                margin-left: 0;
-            }}
-            
-            .toc li {{
-                margin: 8px 0;
-            }}
-            
-            .toc a {{
-                color: #667eea;
-            }}
-            
-            @media (max-width: 768px) {{
-                .container {{
-                    padding: 30px 20px;
-                }}
-                
-                h1 {{
-                    font-size: 1.8em;
-                }}
-                
-                h2 {{
-                    font-size: 1.3em;
-                }}
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <a href="/" class="back-link">← Back to Home</a>
-            <div class="documentation-content">
-                {html_content}
-            </div>
-            <hr style="margin: 40px 0; border: none; border-top: 2px solid #f0f0f0;">
-            <p style="text-align: center; color: #999; font-size: 0.9em; margin-top: 40px;">
-                Server: <code>{server_url}</code> | Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-            </p>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return styled_html
+log('⚙️ Executing: '+c);
+try{
+const r=await fetch('/api/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:c})});
+const d=await r.json();
+if(r.ok){log('✓ Success: '+JSON.stringify(d.actions))}else{
+if(d.detail && d.detail.includes('Permissions not granted')){
+log('❌ VM missing system capabilities. Admin needs to install tools.','error');
+}else{
+log('Error: '+d.detail,'error');
+}
+}
+}catch(e){log('Error: '+e.message,'error')}
+}
+document.getElementById('cmd').addEventListener('keypress',e=>{if(e.key=='Enter')execute()});
+async function initApp(){
+permissionsGranted=checkUserPerms();
+updatePermDisplay();
 
-
-@app.get("/guide", response_class=HTMLResponse)
-async def show_guide(request: Request):
-    """Display quick start guide from GUIDE.md"""
-    if not os.path.exists("GUIDE.md"):
-        return HTMLResponse(content="<h1>Guide not found</h1>", status_code=404)
-    
-    with open("GUIDE.md", "r") as f:
-        md_content = f.read()
-    
-    # Convert markdown to HTML
-    html_content = markdown.markdown(md_content, extensions=['extra', 'codehilite'])
-    
-    # Get the server URL from request
-    server_url = f"{request.url.scheme}://{request.url.netloc}"
-    
-    # Create styled HTML page
-    styled_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>REVA Quick Start Guide</title>
-        <style>
-            * {{
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }}
-            
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                padding: 40px 20px;
-                color: #333;
-            }}
-            
-            .container {{
-                max-width: 900px;
-                margin: 0 auto;
-                background: white;
-                border-radius: 12px;
-                padding: 50px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            }}
-            
-            .back-link {{
-                display: inline-block;
-                color: #667eea;
-                text-decoration: none;
-                font-weight: 600;
-                margin-bottom: 30px;
-                transition: all 0.3s;
-            }}
-            
-            .back-link:hover {{
-                color: #764ba2;
-                transform: translateX(-3px);
-            }}
-            
-            h1, h2, h3, h4, h5, h6 {{
-                color: #667eea;
-                margin-top: 30px;
-                margin-bottom: 15px;
-                border-bottom: 2px solid #f0f0f0;
-                padding-bottom: 10px;
-            }}
-            
-            h1 {{
-                font-size: 2.5em;
-                margin-top: 0;
-                border-bottom: 3px solid #667eea;
-            }}
-            
-            h2 {{
-                font-size: 1.8em;
-            }}
-            
-            h3 {{
-                font-size: 1.4em;
-            }}
-            
-            p {{
-                line-height: 1.8;
-                margin-bottom: 15px;
-                color: #555;
-            }}
-            
-            ul, ol {{
-                margin-left: 30px;
-                margin-bottom: 15px;
-            }}
-            
-            li {{
-                margin-bottom: 8px;
-                color: #555;
-                line-height: 1.6;
-            }}
-            
-            code {{
-                background: #f5f5f5;
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-family: 'Courier New', monospace;
-                color: #d32f2f;
-                font-size: 0.9em;
-            }}
-            
-            pre {{
-                background: #1a1a2e;
-                color: #60a5fa;
-                padding: 20px;
-                border-radius: 8px;
-                overflow-x: auto;
-                margin: 20px 0;
-                border-left: 4px solid #667eea;
-                font-size: 0.9em;
-                line-height: 1.5;
-            }}
-            
-            pre code {{
-                background: none;
-                color: inherit;
-                padding: 0;
-                border-radius: 0;
-                font-size: inherit;
-            }}
-            
-            blockquote {{
-                border-left: 4px solid #667eea;
-                padding-left: 20px;
-                margin-left: 0;
-                margin-bottom: 15px;
-                color: #666;
-                font-style: italic;
-            }}
-            
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin: 20px 0;
-            }}
-            
-            th, td {{
-                border: 1px solid #ddd;
-                padding: 12px;
-                text-align: left;
-            }}
-            
-            th {{
-                background: #f0f4ff;
-                color: #667eea;
-                font-weight: 600;
-            }}
-            
-            tr:nth-child(even) {{
-                background: #f9f9f9;
-            }}
-            
-            a {{
-                color: #667eea;
-                text-decoration: none;
-                font-weight: 500;
-                transition: all 0.3s;
-            }}
-            
-            a:hover {{
-                color: #764ba2;
-                text-decoration: underline;
-            }}
-            
-            em, strong {{
-                color: #667eea;
-            }}
-            
-            .step-box {{
-                background: #f0f4ff;
-                border: 2px solid #e0e0f5;
-                border-radius: 8px;
-                padding: 20px;
-                margin: 20px 0;
-            }}
-            
-            .step-box h3 {{
-                margin-top: 0;
-                color: #667eea;
-            }}
-            
-            @media (max-width: 768px) {{
-                .container {{
-                    padding: 30px 20px;
-                }}
-                
-                h1 {{
-                    font-size: 1.8em;
-                }}
-                
-                h2 {{
-                    font-size: 1.3em;
-                }}
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <a href="/" class="back-link">← Back to Home</a>
-            <div class="guide-content">
-                {html_content}
-            </div>
-            <hr style="margin: 40px 0; border: none; border-top: 2px solid #f0f0f0;">
-            <p style="text-align: center; color: #999; font-size: 0.9em; margin-top: 40px;">
-                Server: <code>{server_url}</code> | Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-            </p>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return styled_html
-
-
-@app.get("/api/config")
-async def get_config(request: Request):
-    """Get server configuration including auto-detected URL"""
-    server_url = f"{request.url.scheme}://{request.url.netloc}"
-    return {
-        "server_url": server_url,
-        "agent_id": "my-agent",
-        "token": "my-secret-token",
-        "timestamp": datetime.now().isoformat()
-    }
+if(!permissionsGranted){
+log('⚠️ Browser permission required to use this app.');
+showPermModal();
+}else{
+log('✅ Browser permission granted. Ready to execute commands.');
+log('📋 VM will handle system capabilities. Commands sent to: '+window.location.origin);
+}
+}
+initApp();
+</script></body></html>"""
 
 # ====================== AGENT ENDPOINTS ======================
 

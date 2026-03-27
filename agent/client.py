@@ -84,11 +84,7 @@ class REVAAgent:
             )
             
             if resp.status_code == 200:
-                data = resp.json()
-                # Check if task_id exists and is not None
-                if data and data.get("task_id"):
-                    return data
-                return None
+                return resp.json()
             elif resp.status_code == 204:  # No content
                 return None
             else:

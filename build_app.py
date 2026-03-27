@@ -27,7 +27,7 @@ def build_app():
         "--windowed",
         "--name=REVA",
         "--distpath=dist",
-        "--workpath=build",
+        "--buildpath=build",
         "--specpath=.",
         "--hidden-import=PyQt5.QtCore",
         "--hidden-import=PyQt5.QtGui",
